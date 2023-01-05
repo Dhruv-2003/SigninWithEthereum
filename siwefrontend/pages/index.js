@@ -6,8 +6,10 @@ import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { ethers } from "ethers";
 import { SiweMessage } from "siwe";
 import { useSignMessage, useSigner, useProvider, useAccount } from "wagmi";
+import { useState, useEffect } from "react";
 
 const inter = Inter({ subsets: ["latin"] });
+const BACKEND_ADDR = "http://localhost:8080";
 
 export default function Home() {
   const { address } = useAccount();
@@ -21,12 +23,19 @@ export default function Home() {
   } = useSignMessage({
     message: "gm wagmi frens",
   });
-  const domain = window.location.host;
-  const origin = window.location.origin;
+  const [message, setMessage] = useState("");
+  const [signature, setSignature] = useState("");
+  const [domain, setDomain] = useState("");
+  const [origin, setOrigin] = useState("");
 
-  console.log(SignData);
+  useEffect(() => {
+    setDomain(window.location.host);
+    setOrigin(window.location.origin);
+  }, []);
 
-  function createSiweMessage(address, statement) {
+  async function createSiweMessage(address, statement) {
+    const res = await fetch(`${BACKEND_ADDR}/nonce`);
+
     const message = new SiweMessage({
       domain,
       address,
@@ -34,20 +43,59 @@ export default function Home() {
       uri: origin,
       version: "1",
       chainId: "80001",
+      nonce: await res.text(),
     });
     return message.prepareMessage();
   }
+
   const signMessageWithETH = async () => {
     try {
-      const message = createSiweMessage(
+      const message = await createSiweMessage(
         address,
         "Sign in with ETH into the App"
       );
-      console.log(await signer.signMessage(message));
+      setMessage(message);
+      console.log(message);
+      const signature = await signer.signMessage(message);
+      setSignature(signature);
+      console.log(signature);
+
+      const res = await fetch(`${BACKEND_ADDR}/verify`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ message, signature }),
+        credentials: "include",
+      });
+      console.log(await res.text());
     } catch (error) {
       console.log(error);
     }
   };
+
+  const sendMessageForVerification = async () => {
+    try {
+      const res = await fetch(`${BACKEND_ADDR}/verify`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ message, signature }),
+        credentials: "include",
+      });
+      console.log(await res.text());
+    } catch (error) {
+      console.log(error);
+    }
+  };
+
+  async function getInformation() {
+    const res = await fetch(`${BACKEND_ADDR}/personal_information`, {
+      credentials: "include",
+    });
+    console.log(await res.text());
+  }
 
   return (
     <>
@@ -73,10 +121,22 @@ export default function Home() {
 
         <div className={styles.center}>
           <ConnectButton />
+          <br />
           <button onClick={() => signMessage()}> Sign Wagmi Message</button>
+          <br />
           <button onClick={() => signMessageWithETH()}>
             {" "}
             Sign SIWE Message
+          </button>
+          <br />
+          <button onClick={() => sendMessageForVerification()}>
+            {" "}
+            Send for Verification
+          </button>
+          <br />
+          <button onClick={() => getInformation()}>
+            {" "}
+            Get Verification Info
           </button>
         </div>
       </main>
